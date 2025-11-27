@@ -44,6 +44,17 @@ export default function EpochConverter() {
   const [htmlInput, setHtmlInput] = useState('');
   const [htmlKey, setHtmlKey] = useState(0); // iframe 리프레시용
   
+  // Diff states
+  const [diffText1, setDiffText1] = useState('');
+  const [diffText2, setDiffText2] = useState('');
+  const [diffMode, setDiffMode] = useState('characters'); // 'characters', 'words', 'lines'
+  const [diffResult, setDiffResult] = useState([]);
+  
+  // Cron states
+  const [cronExpression, setCronExpression] = useState('');
+  const [cronParsed, setCronParsed] = useState(null);
+  const [cronError, setCronError] = useState('');
+  
   // 현재 시간 업데이트
   useEffect(() => {
     const interval = setInterval(() => {
@@ -398,6 +409,107 @@ export default function EpochConverter() {
     setHtmlKey(prev => prev + 1);
   };
 
+  // Diff 계산 (간단한 LCS 기반)
+  const calculateDiff = () => {
+    let arr1, arr2;
+    
+    if (diffMode === 'characters') {
+      arr1 = diffText1.split('');
+      arr2 = diffText2.split('');
+    } else if (diffMode === 'words') {
+      arr1 = diffText1.split(/\s+/);
+      arr2 = diffText2.split(/\s+/);
+    } else { // lines
+      arr1 = diffText1.split('\n');
+      arr2 = diffText2.split('\n');
+    }
+
+    const result = [];
+    let i = 0, j = 0;
+
+    while (i < arr1.length || j < arr2.length) {
+      if (i >= arr1.length) {
+        // 텍스트2에만 있음 (추가)
+        result.push({ type: 'added', value: arr2[j] });
+        j++;
+      } else if (j >= arr2.length) {
+        // 텍스트1에만 있음 (삭제)
+        result.push({ type: 'removed', value: arr1[i] });
+        i++;
+      } else if (arr1[i] === arr2[j]) {
+        // 동일
+        result.push({ type: 'equal', value: arr1[i] });
+        i++;
+        j++;
+      } else {
+        // 다름 - 간단한 휴리스틱: 앞으로 찾아보기
+        let foundInText2 = -1;
+        let foundInText1 = -1;
+        
+        for (let k = j + 1; k < Math.min(j + 5, arr2.length); k++) {
+          if (arr1[i] === arr2[k]) {
+            foundInText2 = k;
+            break;
+          }
+        }
+        
+        for (let k = i + 1; k < Math.min(i + 5, arr1.length); k++) {
+          if (arr1[k] === arr2[j]) {
+            foundInText1 = k;
+            break;
+          }
+        }
+
+        if (foundInText2 !== -1 && (foundInText1 === -1 || foundInText2 - j < foundInText1 - i)) {
+          // 텍스트2에 추가된 것으로 처리
+          result.push({ type: 'added', value: arr2[j] });
+          j++;
+        } else if (foundInText1 !== -1) {
+          // 텍스트1에서 삭제된 것으로 처리
+          result.push({ type: 'removed', value: arr1[i] });
+          i++;
+        } else {
+          // 변경된 것으로 처리
+          result.push({ type: 'removed', value: arr1[i] });
+          result.push({ type: 'added', value: arr2[j] });
+          i++;
+          j++;
+        }
+      }
+    }
+
+    setDiffResult(result);
+  };
+
+  // Diff 샘플 로드
+  const loadDiffSample = () => {
+    setDiffText1(`if (param == ISCSI_PARAM_LOCAL_PORT)
+    rc = kernel_getsockname(tcp_sw_conn->sock,
+                (struct sockaddr *)&addr);
+else
+    rc = kernel_getpeername(tcp_sw_conn->sock,
+                (struct sockaddr *)&addr);
+spin_unlock_bh(&conn->session->frwd_lock);
+if (rc < 0)
+    return rc;`);
+    
+    setDiffText2(`sock = tcp_sw_conn->sock;
+sock_hold(sock->sk);
+spin_unlock_bh(&conn->session->frwd_lock);
+
+if (param == ISCSI_PARAM_LOCAL_PORT)
+    rc = kernel_getsockname(sock,
+                (struct sockaddr *)&addr);
+else
+    rc2 = kernel_getpeername(sock,
+                (struct sockaddr *)&addr);
+sock_put(sock->sk);
+if (rc < 0)
+    return rc;`);
+    
+    calculateDiff();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* 상단 네비게이션 바 */}
@@ -410,10 +522,10 @@ export default function EpochConverter() {
             </div>
             
             {/* 데스크톱 메뉴 */}
-            <div className="hidden lg:flex gap-1">
+            <div className="hidden lg:flex gap-1 overflow-x-auto">
               <button
                 onClick={() => switchTab('timestamp')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'timestamp'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -423,7 +535,7 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('base64')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'base64'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -433,7 +545,7 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('json')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'json'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -443,7 +555,7 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('regex')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'regex'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -453,7 +565,7 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('url')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'url'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -463,7 +575,7 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('parser')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'parser'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -473,13 +585,23 @@ export default function EpochConverter() {
               </button>
               <button
                 onClick={() => switchTab('html')}
-                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs ${
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
                   activeTab === 'html'
                     ? 'bg-indigo-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                HTML Preview
+                HTML
+              </button>
+              <button
+                onClick={() => switchTab('diff')}
+                className={`px-2 py-2 rounded-lg font-medium transition-colors text-xs whitespace-nowrap ${
+                  activeTab === 'diff'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Diff
               </button>
             </div>
             
@@ -585,6 +707,19 @@ export default function EpochConverter() {
                 }`}
               >
                 HTML Preview
+              </button>
+              <button
+                onClick={() => {
+                  switchTab('diff');
+                  setMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  activeTab === 'diff'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Text Diff Checker
               </button>
             </div>
           )}
@@ -1594,6 +1729,209 @@ export default function EpochConverter() {
                   </div>
                 </div>
               </div>
+            </>
+          )}
+
+          {/* Diff 탭 */}
+          {activeTab === 'diff' && (
+            <>
+              {/* 헤더 */}
+              <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <ArrowRightLeft className="w-8 h-8 text-indigo-600" />
+                  <h1 className="text-3xl font-bold text-gray-800">Text Diff Checker</h1>
+                </div>
+                <p className="text-gray-600">두 텍스트의 차이점 비교</p>
+              </div>
+
+              {/* Diff 모드 선택 */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Diff 모드
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDiffMode('characters')}
+                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                      diffMode === 'characters'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    문자
+                  </button>
+                  <button
+                    onClick={() => setDiffMode('words')}
+                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                      diffMode === 'words'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    단어
+                  </button>
+                  <button
+                    onClick={() => setDiffMode('lines')}
+                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                      diffMode === 'lines'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    줄
+                  </button>
+                </div>
+              </div>
+
+              {/* 2열 입력 */}
+              <div className="grid lg:grid-cols-2 gap-4">
+                {/* 원본 텍스트 */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-lg font-semibold text-gray-800">
+                      원본 텍스트
+                    </label>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.readText().then(text => setDiffText1(text));
+                      }}
+                      className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg transition-colors"
+                    >
+                      붙여넣기
+                    </button>
+                  </div>
+                  <textarea
+                    value={diffText1}
+                    onChange={(e) => setDiffText1(e.target.value)}
+                    placeholder="비교할 첫 번째 텍스트를 입력하세요..."
+                    className="w-full h-64 p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none resize-none font-mono text-sm"
+                  />
+                </div>
+
+                {/* 비교 텍스트 */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-lg font-semibold text-gray-800">
+                      비교 텍스트
+                    </label>
+                    <button
+                      onClick={() => {
+                        const temp = diffText1;
+                        setDiffText1(diffText2);
+                        setDiffText2(temp);
+                      }}
+                      className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg transition-colors"
+                    >
+                      ⇄ 교체
+                    </button>
+                  </div>
+                  <textarea
+                    value={diffText2}
+                    onChange={(e) => setDiffText2(e.target.value)}
+                    placeholder="비교할 두 번째 텍스트를 입력하세요..."
+                    className="w-full h-64 p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none resize-none font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* 비교 버튼 */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="flex gap-3">
+                  <button
+                    onClick={calculateDiff}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-xl transition-colors"
+                  >
+                    차이점 비교
+                  </button>
+                  <button
+                    onClick={loadDiffSample}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-6 py-4 rounded-xl transition-colors"
+                  >
+                    샘플 로드
+                  </button>
+                </div>
+              </div>
+
+              {/* Diff 결과 */}
+              {diffResult.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="text-lg font-semibold text-gray-800">
+                      비교 결과
+                    </label>
+                    <div className="flex gap-4 text-sm">
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 bg-green-200 rounded"></span>
+                        추가
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 bg-red-200 rounded"></span>
+                        삭제
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto max-h-96 overflow-y-auto">
+                    <pre className="font-mono text-sm">
+                      {diffResult.map((item, idx) => {
+                        if (item.type === 'added') {
+                          return (
+                            <span key={idx} className="bg-green-600 text-white">
+                              {item.value}
+                              {diffMode === 'words' && ' '}
+                              {diffMode === 'lines' && '\n'}
+                            </span>
+                          );
+                        } else if (item.type === 'removed') {
+                          return (
+                            <span key={idx} className="bg-red-600 text-white line-through">
+                              {item.value}
+                              {diffMode === 'words' && ' '}
+                              {diffMode === 'lines' && '\n'}
+                            </span>
+                          );
+                        } else {
+                          return (
+                            <span key={idx} className="text-gray-300">
+                              {item.value}
+                              {diffMode === 'words' && ' '}
+                              {diffMode === 'lines' && '\n'}
+                            </span>
+                          );
+                        }
+                      })}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {/* 통계 */}
+              {diffResult.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <label className="block text-lg font-semibold text-gray-800 mb-3">
+                    통계
+                  </label>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-green-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-green-700">
+                        {diffResult.filter(d => d.type === 'added').length}
+                      </div>
+                      <div className="text-sm text-gray-600">추가됨</div>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-red-700">
+                        {diffResult.filter(d => d.type === 'removed').length}
+                      </div>
+                      <div className="text-sm text-gray-600">삭제됨</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-gray-700">
+                        {diffResult.filter(d => d.type === 'equal').length}
+                      </div>
+                      <div className="text-sm text-gray-600">동일함</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
