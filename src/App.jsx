@@ -36,11 +36,6 @@ export default function App() {
       <div className="p-4">
         <div className="max-w-2xl mx-auto space-y-4">
           <ActiveTool />
-
-          {/* Footer */}
-          <div className="text-center text-gray-500 text-sm py-4">
-            Made with ❤️ by Claude
-          </div>
         </div>
       </div>
     </div>
