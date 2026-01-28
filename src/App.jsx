@@ -25,7 +25,7 @@ const TOOL_COMPONENTS = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('timestamp');
+  const [activeTab, setActiveTab] = useState('base64');
 
   const ActiveTool = TOOL_COMPONENTS[activeTab];
 

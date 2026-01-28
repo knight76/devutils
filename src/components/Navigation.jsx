@@ -3,8 +3,8 @@ import { Clock, Menu, X } from 'lucide-react';
 import { TabButton } from './shared';
 
 const TABS = [
-  { id: 'timestamp', label: 'Timestamp', mobileLabel: 'Timestamp Converter' },
   { id: 'base64', label: 'Base64', mobileLabel: 'Base64 Encoder/Decoder' },
+  { id: 'timestamp', label: 'Timestamp', mobileLabel: 'Timestamp Converter' },
   { id: 'json', label: 'JSON', mobileLabel: 'JSON Formatter' },
   { id: 'regex', label: 'RegExp', mobileLabel: 'RegExp Tester' },
   { id: 'url', label: 'URL Encode', mobileLabel: 'URL Encoder/Decoder' },
